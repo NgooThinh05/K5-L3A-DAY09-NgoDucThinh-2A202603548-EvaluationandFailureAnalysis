@@ -26,3 +26,18 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
 - **Phạm vi pilot:** Các yêu cầu hoàn tiền giao trễ / hàng hỏng đơn lẻ trên LogiX-VN thuộc 14 ca công khai (một đơn hàng mỗi claim, có `approval_id` và `prior_refunds`).
 - **Giới hạn / bằng chứng còn thiếu:** Chạy hoàn toàn bằng `MockLLM` trên `14` item × `5` seed và `judge replay` (`100` mẫu CSV công khai); chưa đo trên LLM thật, chưa có dữ liệu người dùng thật, cỡ mẫu 14 item cho khoảng tin cậy rộng nên chỉ bắt ổn định hồi quy lớn.
 - **Khi nào tăng eval-set version:** Khi bổ sung item từ trace case hoặc thêm bộ tấn công mới (`adversarial_v2.json` → `v2`), phải tăng `eval_set_version` và chạy lại baseline tương ứng.
+
+---
+
+## Mục v2 (M5–M7: Slice Gate, Độ ổn định & Chống gian lận)
+
+- **Eval set v2:** SHA `a4f50e9bcbf7`, gồm `28` item (`14` v1 + `14` adversarial từ `adversarial_v2.json`) × `5` seed (`140` trials/run). Mọi failure mode bị tấn công đều có `≥ 3` item.
+- **Baseline v2 (`E-swarm-20261117-a4f5`):** `pass_rate = 0.9786`, `refund_amount_correct = 0.9786`, `reply_matches_ledger = 1.0`, `pass_hat_5 = 0.8929`, `pass_at_5 = 1.0`, `cost_per_success = 50.8077`.
+- **A/A noise & chọn ngưỡng `pass_hat_5`:** Chạy `swarm` trên 2 bộ seed (`11,22,33,44,55` vs `66,77,88,99,110`) cho `Δ = +0.0000` trên toàn bộ metric (do dùng `MockLLM` tất định, trừ quy tắc `seed % 5 == 0` xuất hiện đúng `1/5` lần ở cả hai bộ). Trên LLM thật, dải nhiễu A/A sẽ `> 0`, vì vậy ngưỡng sàn phải đặt **bên dưới và ngoài dải nhiễu A/A** để tránh chặn nhầm PR trung thực. Ta chọn `pass_hat_5 >= 0.85` (dưới baseline `0.8929` nhưng chặn được `flaky_regression`).
+- **Slice nào bắt lỗi nào:**
+  - `slice:money_movement` (`pass_rate` & `refund_amount_correct`, sàn `0.90`): bắt `slice_regression` (lỗi `sum_parts` trên seed lẻ chỉ ảnh hưởng các claim có hoàn tiền; `pass_rate` chung vẫn đạt `0.9357 > 0.85` nên gate trung bình bỏ lọt).
+  - `slice:denial` (`pass_rate`, sàn `0.90`): bắt hồi quy từ chối sai (như `seeded_regression` gài `ticket_trust`/`ignore_denied`).
+  - `slice:adversarial` (`pass_rate`, sàn `0.90`): theo dõi riêng khả năng kháng 14 ca tấn công mới (`prompt injection`, `stale_policy`, `cross_principal`, v.v.).
+  - `pass_hat_5` (`>= 0.85`, blocking): bắt agent chập chờn `flaky_regression` (lỗi làm tròn `1/5` seed làm `pass^5` tụt mạnh).
+- **Scorecard & Traps (M7):** `lab9.mutation` đạt **`3/3`, `0` báo nhầm** (`fixed`, `honest_refactor` merge; `seeded_regression`, `slice_regression`, `flaky_regression` bị block). `lab9.traps` chặn `4/4` trap công khai (`evaluator_errors_as_nan`, `dropped_failing_rows`, `cherry_picked_seeds`, `loosened_spec`), cộng thêm kiểm tra **dòng trùng lặp**, **`evaluator_failures` trên run xanh**, và **đổi nhãn slice** trong `integrity_check`.
+- **Giới hạn cỡ mẫu:** Một bug hiếm chỉ xuất hiện ở `1/3` seed (`rare`) **không** phát hiện ổn định được với `5` seed (nếu seed không chia hết cho 3 hoặc chỉ dính ít seed thì `pass_rate`/`pass_hat_5` dao động lớn); không được hạ/tăng ngưỡng ép gate "bắt" bug hiếm này mà cần tăng số seed (hoặc bổ sung unit test tất định cho cơ chế đó).
