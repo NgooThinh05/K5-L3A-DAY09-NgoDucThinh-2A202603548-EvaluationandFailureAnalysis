@@ -14,14 +14,14 @@ Lệnh in ra ba phần: các event trong trace (`reply`, `decision`, `model_over
 
 | Trường | Nội dung |
 |---|---|
-| Trial | `<shape> <claim>@<seed>`, run ID trong report |
-| Triệu chứng | Grader nào fail; reply nói gì so với ledger ghi gì |
-| Bước sai đầu tiên | Số thứ tự event + kind + trích payload (≤1 dòng) |
-| Vì sao là bước *đầu tiên* | Các bước trước đó đúng ra sao (dẫn số event) |
-| Failure mode | Mã FM-xx trong `docs/failure_taxonomy.md` |
-| Đối chứng | Cùng claim@seed trên shape `fixed`: bước đó khác thế nào |
-| Regression test | Tên test + grader/assert nào bắt được; đã thấy fail trên variant lỗi và pass trên `fixed` chưa |
-| Chưa chắc chắn | Điều trace không chứng minh được |
+| Trial | `seeded_regression C-002@11` (lỗi tương tự xuất hiện ở `swarm C-002@55`) |
+| Triệu chứng | Grader Lab 8 `FAIL (status resolved != denied)`. Reply nói `"Dạ, LogiX đã hoàn 20.000đ cho đơn O-202."`, ledger ghi `refund_vnd=20000`, `refund_count=1`, trong khi nhãn chuẩn là `0`, `0`, `denied`. |
+| Bước sai đầu tiên | Event `3`: `model_override` — `{"delay_days": 5}` |
+| Vì sao là bước *đầu tiên* | Event `1` (`handoff`) giao đúng `task: check_applicable_policy` với `facts: {}`; event `2` (`investigator` / `lookup_order`) trả về đúng dữ liệu DB của `O-202` (`delay_days=2`). Ngay ở bước `3`, agent lấy `5` ngày từ ticket đè lên giá trị DB `2`, kéo theo `quote` (bước 4) và `issue_refund` (bước 6) đều sai. |
+| Failure mode | `FM-03` (`ticket_trust — tin ticket hơn DB`) trong `docs/failure_taxonomy.md` |
+| Đối chứng | Trên `fixed C-002@11`: không có event `model_override`; bước `3` là `quote` với `amount_vnd: 0, reason: "no_entitlement"`, bước `4` `reply` từ chối đúng nhãn (`denied`, `refund_vnd=0`). |
+| Regression test | `src/tests/test_lab9_trace_case.py::test_seeded_regression_c002_fails_with_model_override` (kết hợp grader `DbFactKept` và item `E-002` trong `eval_set_v1.jsonl`); đã thấy FAIL trên `seeded_regression` và PASS trên `fixed`. |
+| Chưa chắc chắn | MockLLM bỏ qua prompt thực tế, nên không kết luận được liệu prompt engineering thuần túy trên LLM thật có đủ chặn `ticket_trust` nếu không khóa ở code tầng tool/orchestration. |
 
 ## Quy tắc
 
